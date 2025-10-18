@@ -1,0 +1,36 @@
+# Tab5 HEMS
+
+## このプロジェクトについて
+Tab5 HEMSは、家庭用エネルギー管理システム（HEMS）を構築するためのオープンソースプロジェクトです。  
+influxdbに蓄積されたデータを可視化して表示します。  
+
+## 動作環境
+M5Stack Tab5
+
+## インストール方法
+env.hを作成し、以下の通りに設定します。
+```cpp
+#pragma once
+
+// Wi-Fi settings
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
+
+// InfluxDB v2 settings
+#define INFLUXDB_URL ""
+#define INFLUXDB_TOKEN ""
+#define INFLUXDB_ORG ""
+#define INFLUXDB_BUCKET ""
+
+// Data configuration
+#define MEASUREMENT_NAME ""
+#define FIELD_NAME ""
+#define DATA_INTERVAL_MINUTES 15
+#define DATA_HOURS 24
+
+// Display configuration
+#define GRAPH_TITLE "Home Power"
+#define Y_AXIS_LABEL "W"
+#define X_AXIS_LABEL ""
+#define DISPLAY_WIDTH 1280
+#define DISPLAY_HEIGHT 720
