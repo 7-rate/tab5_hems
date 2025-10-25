@@ -159,63 +159,122 @@ bool InfluxDBManager::getMonthlyEnergyUsage(float &monthlyUsage) {
         measurement = config->getDataSourceConfig().measurement;
     }
 
-    String query;
-    query  = "import \"date\"\n";
-    query += "start = date.truncate(t: now(), unit: 1mo)\n";
-    query += "from(bucket: \"";
-    query += INFLUXDB_BUCKET;
-    query += "\")";
-    query += " |> range(start: start)";
-    query += " |> filter(fn: (r) => r[\"_measurement\"] == \"";
-    query += measurement;
-    query += "\")";
-    query += " |> filter(fn: (r) => r[\"_field\"] == \"";
-    query += FIELD_NAME_CUMULATIVE_ENERGY_KWH;
-    query += "\")";
-    query += " |> sort(columns: [\"_time\"], desc: false)";
+    // ステップ1: 最新の1件を取得
+    String latestQuery = "from(bucket: \"";
+    latestQuery += INFLUXDB_BUCKET;
+    latestQuery += "\")";
+    latestQuery += " |> range(start: -30d)";
+    latestQuery += " |> filter(fn: (r) => r[\"_measurement\"] == \"";
+    latestQuery += measurement;
+    latestQuery += "\")";
+    latestQuery += " |> filter(fn: (r) => r[\"_field\"] == \"";
+    latestQuery += FIELD_NAME_CUMULATIVE_ENERGY_KWH;
+    latestQuery += "\")";
+    latestQuery += " |> last()";
 
-    Serial.println("Executing monthly energy query: " + query);
+    Serial.println("Executing latest value query: " + latestQuery);
 
-    FluxQueryResult result = client->query(query);
+    FluxQueryResult latestResult = client->query(latestQuery);
 
-    if (result.getError() != "") {
-        Serial.printf("Monthly query error: %s\n", result.getError().c_str());
-        Serial.printf("InfluxDB error: %s\n", client->getLastErrorMessage().c_str());
-        result.close();
+    if (latestResult.getError() != "") {
+        Serial.printf("Latest query error: %s\n", latestResult.getError().c_str());
+        latestResult.close();
         return false;
     }
 
-    bool hasData = false;
-    float firstValue = 0.0f;
-    float lastValue = 0.0f;
+    float latestValue = 0.0f;
+    String latestTime = "";
+    bool hasLatest = false;
 
-    while (result.next()) {
-        FluxValue valueFlux = result.getValueByName("_value");
-        if (valueFlux.isNull()) {
-            continue;
+    if (latestResult.next()) {
+        FluxValue valueFlux = latestResult.getValueByName("_value");
+        FluxValue timeFlux = latestResult.getValueByName("_time");
+        
+        if (!valueFlux.isNull() && !timeFlux.isNull()) {
+            latestValue = valueFlux.getDouble();
+            FluxDateTime time = timeFlux.getDateTime();
+            latestTime = time.format("%Y-%m-%dT%H:%M:%SZ");
+            hasLatest = true;
+            Serial.println("Latest value: " + String(latestValue) + " at " + latestTime);
         }
-
-        float value = valueFlux.getDouble();
-        if (!hasData) {
-            firstValue = value;
-            hasData = true;
-        }
-        lastValue = value;
     }
 
-    result.close();
+    latestResult.close();
 
-    if (!hasData) {
-        Serial.println("No cumulative energy data found for current month");
+    if (!hasLatest) {
+        Serial.println("No latest cumulative energy data found");
         return false;
     }
 
-    monthlyUsage = lastValue - firstValue;
+    // ステップ2: 月初の日付を計算 (latestTimeから)
+    // latestTimeの形式: "2025-10-26T12:34:56Z"
+    String yearStr = latestTime.substring(0, 4);
+    String monthStr = latestTime.substring(5, 7);
+    String monthStartTime = yearStr + "-" + monthStr + "-01T00:00:00Z";
+
+    Serial.println("Month start time: " + monthStartTime);
+
+    // ステップ3: 月初のcumulative_energy_kwhを取得（月初のデータが無い場合は今月の最古データを取得）
+    // 今月の最後の日を計算
+    int month = monthStr.toInt();
+    int year = yearStr.toInt();
+    int nextMonth = month + 1;
+    int nextYear = year;
+    if (nextMonth > 12) {
+        nextMonth = 1;
+        nextYear++;
+    }
+    String monthEndTime = String(nextYear) + "-" + (nextMonth < 10 ? "0" : "") + String(nextMonth) + "-01T00:00:00Z";
+
+    String monthStartQuery = "from(bucket: \"";
+    monthStartQuery += INFLUXDB_BUCKET;
+    monthStartQuery += "\")";
+    monthStartQuery += " |> range(start: " + monthStartTime + ", stop: " + monthEndTime + ")";
+    monthStartQuery += " |> filter(fn: (r) => r[\"_measurement\"] == \"";
+    monthStartQuery += measurement;
+    monthStartQuery += "\")";
+    monthStartQuery += " |> filter(fn: (r) => r[\"_field\"] == \"";
+    monthStartQuery += FIELD_NAME_CUMULATIVE_ENERGY_KWH;
+    monthStartQuery += "\")";
+    monthStartQuery += " |> first()";
+
+    Serial.println("Executing month start query: " + monthStartQuery);
+
+    FluxQueryResult monthStartResult = client->query(monthStartQuery);
+
+    if (monthStartResult.getError() != "") {
+        Serial.printf("Month start query error: %s\n", monthStartResult.getError().c_str());
+        monthStartResult.close();
+        return false;
+    }
+
+    float monthStartValue = 0.0f;
+    bool hasMonthStart = false;
+
+    if (monthStartResult.next()) {
+        FluxValue valueFlux = monthStartResult.getValueByName("_value");
+        
+        if (!valueFlux.isNull()) {
+            monthStartValue = valueFlux.getDouble();
+            hasMonthStart = true;
+            Serial.println("Month start value: " + String(monthStartValue));
+        }
+    }
+
+    monthStartResult.close();
+
+    if (!hasMonthStart) {
+        Serial.println("No data found for current month");
+        return false;
+    }
+
+    // ステップ4: 差分を計算
+    monthlyUsage = latestValue - monthStartValue;
     if (monthlyUsage < 0) {
         monthlyUsage = 0;
     }
 
-    Serial.println("Monthly energy usage: " + String(monthlyUsage));
+    Serial.println("Monthly energy usage: " + String(monthlyUsage) + " kWh");
     return true;
 }
 
