@@ -24,5 +24,6 @@ public:
     bool connect();
     std::vector<DataPoint> getData();
     float getLatestValue();
+    bool getMonthlyEnergyUsage(float &monthlyUsage);
     bool isConnected();
 };

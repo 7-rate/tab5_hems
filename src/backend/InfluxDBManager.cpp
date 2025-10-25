@@ -44,7 +44,7 @@ bool InfluxDBManager::connect() {
 
 String InfluxDBManager::buildFluxQuery() {
     String measurement = MEASUREMENT_NAME;
-    String field = FIELD_NAME;
+    String field = FIELD_NAME_INSTANT_POWER_W;
     int hours = DATA_HOURS;
     int intervalMinutes = DATA_INTERVAL_MINUTES;
     
@@ -144,6 +144,79 @@ float InfluxDBManager::getLatestValue() {
         return data.back().value; // 最後のデータポイントを返す
     }
     return 0.0;
+}
+
+bool InfluxDBManager::getMonthlyEnergyUsage(float &monthlyUsage) {
+    monthlyUsage = 0.0f;
+
+    if (!client || !isConnected()) {
+        Serial.println("InfluxDB not connected");
+        return false;
+    }
+
+    String measurement = MEASUREMENT_NAME;
+    if (config) {
+        measurement = config->getDataSourceConfig().measurement;
+    }
+
+    String query;
+    query  = "import \"date\"\n";
+    query += "start = date.truncate(t: now(), unit: 1mo)\n";
+    query += "from(bucket: \"";
+    query += INFLUXDB_BUCKET;
+    query += "\")";
+    query += " |> range(start: start)";
+    query += " |> filter(fn: (r) => r[\"_measurement\"] == \"";
+    query += measurement;
+    query += "\")";
+    query += " |> filter(fn: (r) => r[\"_field\"] == \"";
+    query += FIELD_NAME_CUMULATIVE_ENERGY_KWH;
+    query += "\")";
+    query += " |> sort(columns: [\"_time\"], desc: false)";
+
+    Serial.println("Executing monthly energy query: " + query);
+
+    FluxQueryResult result = client->query(query);
+
+    if (result.getError() != "") {
+        Serial.printf("Monthly query error: %s\n", result.getError().c_str());
+        Serial.printf("InfluxDB error: %s\n", client->getLastErrorMessage().c_str());
+        result.close();
+        return false;
+    }
+
+    bool hasData = false;
+    float firstValue = 0.0f;
+    float lastValue = 0.0f;
+
+    while (result.next()) {
+        FluxValue valueFlux = result.getValueByName("_value");
+        if (valueFlux.isNull()) {
+            continue;
+        }
+
+        float value = valueFlux.getDouble();
+        if (!hasData) {
+            firstValue = value;
+            hasData = true;
+        }
+        lastValue = value;
+    }
+
+    result.close();
+
+    if (!hasData) {
+        Serial.println("No cumulative energy data found for current month");
+        return false;
+    }
+
+    monthlyUsage = lastValue - firstValue;
+    if (monthlyUsage < 0) {
+        monthlyUsage = 0;
+    }
+
+    Serial.println("Monthly energy usage: " + String(monthlyUsage));
+    return true;
 }
 
 bool InfluxDBManager::isConnected() {

@@ -4,7 +4,7 @@
 
 GraphRenderer::GraphRenderer() : config(nullptr) {
     // デフォルトのグラフエリアを設定（1280x720の横レイアウト想定）
-    setGraphArea(100, 80, 900, 500);
+    setGraphArea(100, 120, 1080, 400);
     minValue = 0;
     maxValue = 100;
 }
@@ -48,23 +48,14 @@ void GraphRenderer::calculateScale() {
     }
 
     // 自動スケーリング
-    minValue = dataPoints[0].value;
     maxValue = dataPoints[0].value;
-
     for (const auto &point : dataPoints) {
-        if (point.value < minValue)
-            minValue = point.value;
         if (point.value > maxValue)
             maxValue = point.value;
     }
 
-    // 余白を追加
-    float range = maxValue - minValue;
-    if (range == 0)
-        range = 1; // ゼロ除算を防ぐ
-
-    minValue -= range * 0.1;
-    maxValue += range * 0.1;
+    minValue = 0;
+    maxValue = ((int)(maxValue / 500) + 1) * 500;
 }
 
 int GraphRenderer::mapValueToY(float value) {
@@ -95,8 +86,8 @@ void GraphRenderer::draw() {
     }
 
     M5.Display.setTextColor(TFT_WHITE);
-    M5.Display.setFont(&fonts::lgfxJapanMinchoP_24);
-    M5.Display.drawString(title, 20, 20);
+    M5.Display.setFont(&fonts::lgfxJapanMinchoP_16);
+    M5.Display.drawString(title, 10, 10);
 
     drawAxes();
     drawGrid();
@@ -145,31 +136,39 @@ void GraphRenderer::drawLabels() {
     }
 
     // Y軸ラベル（縦書き風に配置）
-    M5.Display.setFont(&fonts::lgfxJapanMinchoP_12);
+    M5.Display.setFont(&fonts::lgfxJapanGothicP_12);
     M5.Display.drawString(yLabel, 10, graphY + graphHeight / 2);
 
     // Y軸の値
     for (int i = 0; i <= 5; i++) {
         int y = graphY + graphHeight - (i * graphHeight) / 5;
         float value = minValue + (i * (maxValue - minValue)) / 5;
-        M5.Display.setFont(&fonts::lgfxJapanMinchoP_12);
-        M5.Display.drawString(String(value, 1), graphX - 80, y - 10);
+        M5.Display.setFont(&fonts::lgfxJapanGothicP_12);
+        M5.Display.drawString(String(int(value)), graphX - 80, y - 10);
     }
 
     // X軸ラベル
     M5.Display.drawString(xLabel, graphX + graphWidth / 2 - 30, graphY + graphHeight + 40);
 
-    // 時間ラベル（簡略化）
+    // X軸の時間ラベル（-3h, -6hなどで表示）
     if (!dataPoints.empty()) {
-        // 開始時刻
-        String startLabel = "24h ago";
+        int hours = 24;
         if (config) {
-            startLabel = String(config->getSystemConfig().dataHours) + "h ago";
+            hours = config->getSystemConfig().dataHours;
         }
-        M5.Display.drawString(startLabel, graphX - 30, graphY + graphHeight + 60);
-
-        // 終了時刻
-        M5.Display.drawString("Now", graphX + graphWidth - 30, graphY + graphHeight + 60);
+        // 8分割でラベルを表示
+        for (int i = 0; i <= 8; i++) {
+            int x = graphX + (i * graphWidth) / 8;
+            int hourLabel = -hours + (hours * i) / 8;
+            String label;
+            if (i == 8) {
+                label = "Now";
+            } else {
+                label = String(hourLabel) + "h";
+            }
+            M5.Display.setFont(&fonts::lgfxJapanGothicP_12);
+            M5.Display.drawString(label, x - 15, graphY + graphHeight + 30);
+        }
     }
 }
 
@@ -190,31 +189,32 @@ void GraphRenderer::drawDataLine() {
 
         M5.Display.drawLine(x1, y1, x2, y2, lineColor);
 
-        // データポイントをドットで表示
-        M5.Display.fillCircle(x2, y2, 2, TFT_YELLOW);
-    }
-
-    // 最初のポイントもドットで表示
-    if (!dataPoints.empty()) {
-        int x1 = mapTimeToX(0);
-        int y1 = mapValueToY(dataPoints[0].value);
-        M5.Display.fillCircle(x1, y1, 1, TFT_YELLOW);
     }
 }
 
 void GraphRenderer::drawLatestValue(float value) {
-    // 最新値を画面右側に大きく表示（1280x720用に調整）
-    String unit = "units";
-
-    if (config) {
-        const auto &dataConfig = config->getDataSourceConfig();
-        unit = dataConfig.unit;
-    }
+    M5.Display.fillRect(100, 600, 400, 120, TFT_BLACK);
 
     M5.Display.setTextColor(TFT_WHITE);
+    M5.Display.setFont(&fonts::lgfxJapanGothicP_12);
+    M5.Display.drawString("Latest Power", 100, 600);
 
-    M5.Display.setFont(&fonts::lgfxJapanMinchoP_36);
-    M5.Display.drawString(String(int(value)), graphX + graphWidth + 50, 160);
-    M5.Display.drawString("[w]", graphX + graphWidth + 50, 220);
+    M5.Display.setFont(&fonts::lgfxJapanGothicP_32);
+    M5.Display.drawString(String(int(value)) + "W", 300, 600);
+}
 
+void GraphRenderer::drawMonthlyEnergyUsage(float usage, bool hasData) {
+    M5.Display.fillRect(700, 600, 400, 120, TFT_BLACK);
+
+    M5.Display.setTextColor(TFT_WHITE);
+    M5.Display.setFont(&fonts::lgfxJapanGothicP_12);
+    M5.Display.drawString("Monthly Energy", 700, 600);
+
+    if (hasData) {
+        M5.Display.setFont(&fonts::lgfxJapanGothicP_32);
+        M5.Display.drawString(String(int(usage)) + "kWh", 900, 600);
+    } else {
+        M5.Display.setFont(&fonts::lgfxJapanGothicP_32);
+        M5.Display.drawString("NaN", 900, 600);
+    }
 }

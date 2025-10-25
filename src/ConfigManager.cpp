@@ -5,8 +5,8 @@
 ConfigManager::ConfigManager() {
     // デフォルト設定
     dataSource.measurement = MEASUREMENT_NAME;
-    dataSource.field = FIELD_NAME;
-    dataSource.unit = "units";
+    dataSource.field = FIELD_NAME_INSTANT_POWER_W;
+    dataSource.unit = "W";
     dataSource.displayName = "Sensor Data";
     dataSource.color = TFT_YELLOW;
     dataSource.minRange = 0.0;
@@ -17,9 +17,9 @@ ConfigManager::ConfigManager() {
     graph.xAxisLabel = X_AXIS_LABEL;
     graph.yAxisLabel = Y_AXIS_LABEL;
     graph.graphX = 100;
-    graph.graphY = 80;
-    graph.graphWidth = 900;
-    graph.graphHeight = 500;
+    graph.graphY = 120;
+    graph.graphWidth = 1080;
+    graph.graphHeight = 380;
     graph.gridLines = 8;
     graph.showGrid = true;
     graph.showLegend = true;
@@ -71,30 +71,6 @@ void ConfigManager::setValueRange(float min, float max) {
     dataSource.minRange = min;
     dataSource.maxRange = max;
     dataSource.autoScale = false;
-}
-
-void ConfigManager::loadTemperatureConfig() {
-    setDataSource("environment", "temperature", "°C");
-    setGraphTitle("Temperature Monitor");
-    setGraphAxes("Time", "Temperature (°C)");
-    setValueRange(-10.0, 50.0);
-    dataSource.color = TFT_RED;
-}
-
-void ConfigManager::loadHumidityConfig() {
-    setDataSource("environment", "humidity", "%");
-    setGraphTitle("Humidity Monitor");
-    setGraphAxes("Time", "Humidity (%)");
-    setValueRange(0.0, 100.0);
-    dataSource.color = TFT_BLUE;
-}
-
-void ConfigManager::loadPowerConfig() {
-    setDataSource("power", "consumption", "kW");
-    setGraphTitle("Power Consumption");
-    setGraphAxes("Time", "Power (kW)");
-    setAutoScale(true);
-    dataSource.color = TFT_GREEN;
 }
 
 void ConfigManager::loadCustomConfig(const String& measurement, const String& field) {

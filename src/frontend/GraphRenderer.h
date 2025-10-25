@@ -28,5 +28,6 @@ public:
     void setData(const std::vector<DataPoint>& data);
     void draw();
     void drawLatestValue(float value);
+    void drawMonthlyEnergyUsage(float usage, bool hasData);
     void clear();
 };

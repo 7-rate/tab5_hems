@@ -29,6 +29,11 @@ void updateData() {
         float latestValue = data.back().value;
         graphRenderer.drawLatestValue(latestValue);
 
+        // 月間使用量表示
+        float monthlyUsage = 0.0f;
+        bool hasMonthlyUsage = influxManager.getMonthlyEnergyUsage(monthlyUsage);
+        graphRenderer.drawMonthlyEnergyUsage(monthlyUsage, hasMonthlyUsage);
+
         Serial.println("Data updated successfully. Points: " + String(data.size()));
         Serial.println("Latest value: " + String(latestValue));
     } else {
@@ -41,6 +46,8 @@ void updateData() {
         M5.Display.drawString("No Data Available", 100, 100);
         M5.Display.setTextColor(TFT_WHITE);
         M5.Display.drawString("Check InfluxDB connection", 100, 130);
+
+        graphRenderer.drawMonthlyEnergyUsage(0.0f, false);
     }
 
     lastDataUpdate = millis();
@@ -60,11 +67,6 @@ void setup() {
 
     // 設定の初期化とプリセット読み込み
     // 必要に応じて以下のプリセットを選択してください：
-    // configManager.loadTemperatureConfig();
-    // configManager.loadHumidityConfig();
-    // configManager.loadPowerConfig();
-    // または、カスタム設定：
-    // configManager.loadCustomConfig("your_measurement", "your_field");
 
     // データ更新間隔を設定から取得
     dataUpdateInterval = configManager.getSystemConfig().updateIntervalMinutes * 60 * 1000;

@@ -24,7 +24,7 @@ env.hを作成し、以下の通りに設定します。
 
 // Data configuration
 #define MEASUREMENT_NAME ""
-#define FIELD_NAME ""
+#define FIELD_NAME_INSTANT_POWER_W ""
 #define DATA_INTERVAL_MINUTES 15
 #define DATA_HOURS 24
 
@@ -34,3 +34,4 @@ env.hを作成し、以下の通りに設定します。
 #define X_AXIS_LABEL ""
 #define DISPLAY_WIDTH 1280
 #define DISPLAY_HEIGHT 720
+```
