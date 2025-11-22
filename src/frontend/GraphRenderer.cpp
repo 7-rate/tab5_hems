@@ -7,6 +7,41 @@ GraphRenderer::GraphRenderer() : config(nullptr) {
     setGraphArea(100, 120, 1080, 400);
     minValue = 0;
     maxValue = 100;
+    
+    // デフォルトのスケール設定
+    currentTimeRange = TIME_1D;
+    currentYScale = SCALE_AUTO;
+    
+    // 時間範囲ボタンの初期化
+    int btnWidth = 70;
+    int btnHeight = 35;
+    int startX = 300;
+    int startY = 20;
+    int spacing = 10;
+    
+    const char* timeLabels[] = {"3h", "6h", "12h", "1d", "3d", "7d", "1m"};
+    for (int i = 0; i < 7; i++) {
+        Button btn;
+        btn.x = startX + i * (btnWidth + spacing);
+        btn.y = startY;
+        btn.width = btnWidth;
+        btn.height = btnHeight;
+        btn.label = timeLabels[i];
+        timeButtons.push_back(btn);
+    }
+    
+    // Y軸スケールボタンの初期化
+    startY = 70;
+    const char* yLabels[] = {"Auto", "500", "1k", "1.5k", "2k", "3k", "4k"};
+    for (int i = 0; i < 7; i++) {
+        Button btn;
+        btn.x = startX + i * (btnWidth + spacing);
+        btn.y = startY;
+        btn.width = btnWidth;
+        btn.height = btnHeight;
+        btn.label = yLabels[i];
+        yScaleButtons.push_back(btn);
+    }
 }
 
 void GraphRenderer::setConfig(ConfigManager *configManager) {
@@ -37,25 +72,20 @@ void GraphRenderer::calculateScale() {
         return;
     }
 
-    // ConfigManagerが設定されている場合は、その設定を使用
-    if (config) {
-        const auto &dataConfig = config->getDataSourceConfig();
-        if (!dataConfig.autoScale) {
-            minValue = dataConfig.minRange;
-            maxValue = dataConfig.maxRange;
-            return;
-        }
-    }
-
-    // 自動スケーリング
-    maxValue = dataPoints[0].value;
-    for (const auto &point : dataPoints) {
-        if (point.value > maxValue)
-            maxValue = point.value;
-    }
-
     minValue = 0;
-    maxValue = ((int)(maxValue / 500) + 1) * 500;
+
+    // Y軸スケールの設定を適用
+    if (currentYScale == SCALE_AUTO) {
+        // 自動スケーリング
+        maxValue = dataPoints[0].value;
+        for (const auto &point : dataPoints) {
+            if (point.value > maxValue)
+                maxValue = point.value;
+        }
+        maxValue = ((int)(maxValue / 500) + 1) * 500;
+    } else {
+        maxValue = getYScaleMax();
+    }
 }
 
 int GraphRenderer::mapValueToY(float value) {
@@ -96,6 +126,9 @@ void GraphRenderer::draw() {
     if (!dataPoints.empty()) {
         drawDataLine();
     }
+    
+    // ボタンを描画
+    drawButtons();
 }
 
 void GraphRenderer::drawAxes() {
@@ -152,10 +185,7 @@ void GraphRenderer::drawLabels() {
 
     // X軸の時間ラベル（-3h, -6hなどで表示）
     if (!dataPoints.empty()) {
-        int hours = 24;
-        if (config) {
-            hours = config->getSystemConfig().dataHours;
-        }
+        int hours = getTimeRangeHours();
         // 8分割でラベルを表示
         for (int i = 0; i <= 8; i++) {
             int x = graphX + (i * graphWidth) / 8;
@@ -163,6 +193,10 @@ void GraphRenderer::drawLabels() {
             String label;
             if (i == 8) {
                 label = "Now";
+            } else if (hours >= 24) {
+                int days = hours / 24;
+                int dayLabel = -days + (days * i) / 8;
+                label = String(dayLabel) + "d";
             } else {
                 label = String(hourLabel) + "h";
             }
@@ -216,5 +250,95 @@ void GraphRenderer::drawMonthlyEnergyUsage(float usage, bool hasData) {
     } else {
         M5.Display.setFont(&fonts::lgfxJapanGothicP_32);
         M5.Display.drawString("NaN", 900, 600);
+    }
+}
+
+void GraphRenderer::drawButtons() {
+    M5.Display.setFont(&fonts::lgfxJapanGothicP_12);
+    
+    // 時間範囲ボタンを描画
+    for (size_t i = 0; i < timeButtons.size(); i++) {
+        const Button& btn = timeButtons[i];
+        bool isSelected = (i == (size_t)currentTimeRange);
+        
+        // ボタンの背景
+        uint32_t bgColor = isSelected ? TFT_BLUE : TFT_DARKGREY;
+        M5.Display.fillRect(btn.x, btn.y, btn.width, btn.height, bgColor);
+        M5.Display.drawRect(btn.x, btn.y, btn.width, btn.height, TFT_WHITE);
+        
+        // ボタンのラベル
+        M5.Display.setTextColor(TFT_WHITE);
+        int textX = btn.x + (btn.width - M5.Display.textWidth(btn.label)) / 2;
+        int textY = btn.y + (btn.height - M5.Display.fontHeight()) / 2;
+        M5.Display.drawString(btn.label, textX, textY);
+    }
+    
+    // Y軸スケールボタンを描画
+    for (size_t i = 0; i < yScaleButtons.size(); i++) {
+        const Button& btn = yScaleButtons[i];
+        bool isSelected = (i == (size_t)currentYScale);
+        
+        // ボタンの背景
+        uint32_t bgColor = isSelected ? TFT_GREEN : TFT_DARKGREY;
+        M5.Display.fillRect(btn.x, btn.y, btn.width, btn.height, bgColor);
+        M5.Display.drawRect(btn.x, btn.y, btn.width, btn.height, TFT_WHITE);
+        
+        // ボタンのラベル
+        M5.Display.setTextColor(TFT_WHITE);
+        int textX = btn.x + (btn.width - M5.Display.textWidth(btn.label)) / 2;
+        int textY = btn.y + (btn.height - M5.Display.fontHeight()) / 2;
+        M5.Display.drawString(btn.label, textX, textY);
+    }
+}
+
+bool GraphRenderer::handleTouch(int x, int y) {
+    // 時間範囲ボタンのチェック
+    for (size_t i = 0; i < timeButtons.size(); i++) {
+        const Button& btn = timeButtons[i];
+        if (x >= btn.x && x <= btn.x + btn.width &&
+            y >= btn.y && y <= btn.y + btn.height) {
+            currentTimeRange = (TimeRange)i;
+            Serial.println("Time range changed to: " + btn.label);
+            return true;
+        }
+    }
+    
+    // Y軸スケールボタンのチェック
+    for (size_t i = 0; i < yScaleButtons.size(); i++) {
+        const Button& btn = yScaleButtons[i];
+        if (x >= btn.x && x <= btn.x + btn.width &&
+            y >= btn.y && y <= btn.y + btn.height) {
+            currentYScale = (YAxisScale)i;
+            Serial.println("Y scale changed to: " + btn.label);
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+int GraphRenderer::getTimeRangeHours() const {
+    switch (currentTimeRange) {
+        case TIME_3H: return 3;
+        case TIME_6H: return 6;
+        case TIME_12H: return 12;
+        case TIME_1D: return 24;
+        case TIME_3D: return 72;
+        case TIME_7D: return 168;
+        case TIME_1M: return 720;  // 30日
+        default: return 24;
+    }
+}
+
+float GraphRenderer::getYScaleMax() const {
+    switch (currentYScale) {
+        case SCALE_500: return 500.0f;
+        case SCALE_1000: return 1000.0f;
+        case SCALE_1500: return 1500.0f;
+        case SCALE_2000: return 2000.0f;
+        case SCALE_3000: return 3000.0f;
+        case SCALE_4000: return 4000.0f;
+        case SCALE_AUTO:
+        default: return maxValue;
     }
 }

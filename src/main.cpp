@@ -17,8 +17,11 @@ unsigned long dataUpdateInterval;
 void updateData() {
     Serial.println("Updating data from InfluxDB...");
 
+    // 現在の時間範囲を取得
+    int hours = graphRenderer.getTimeRangeHours();
+    
     // データ取得
-    std::vector<DataPoint> data = influxManager.getData();
+    std::vector<DataPoint> data = influxManager.getData(hours);
 
     if (!data.empty()) {
         // グラフ描画
@@ -109,6 +112,20 @@ void setup() {
 void loop() {
     M5.update();
 
+    // タッチ操作の処理
+    auto touch = M5.Touch.getDetail();
+    if (touch.wasPressed()) {
+        int x = touch.x;
+        int y = touch.y;
+        Serial.printf("Touch detected at: (%d, %d)\n", x, y);
+        
+        if (graphRenderer.handleTouch(x, y)) {
+            // ボタンが押された場合、データを更新
+            Serial.println("Button pressed, updating data...");
+            updateData();
+        }
+    }
+
     // 設定で指定された間隔でデータを更新
     if (millis() - lastDataUpdate >= dataUpdateInterval) {
         updateData();
@@ -122,5 +139,5 @@ void loop() {
         }
     }
 
-    delay(1000); // 1秒間隔でチェック
+    delay(100); // タッチ処理のため短く設定
 }

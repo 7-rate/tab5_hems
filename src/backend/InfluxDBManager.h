@@ -22,7 +22,7 @@ public:
     ~InfluxDBManager();
     void setConfig(ConfigManager* configManager);
     bool connect();
-    std::vector<DataPoint> getData();
+    std::vector<DataPoint> getData(int hours = -1);
     float getLatestValue();
     bool getMonthlyEnergyUsage(float &monthlyUsage);
     bool isConnected();

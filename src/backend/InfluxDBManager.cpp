@@ -79,7 +79,7 @@ String InfluxDBManager::buildFluxQuery() {
     return query;
 }
 
-std::vector<DataPoint> InfluxDBManager::getData() {
+std::vector<DataPoint> InfluxDBManager::getData(int hours) {
     std::vector<DataPoint> dataPoints;
     
     if (!client || !isConnected()) {
@@ -87,7 +87,42 @@ std::vector<DataPoint> InfluxDBManager::getData() {
         return dataPoints;
     }
     
-    String query = buildFluxQuery();
+    // hoursパラメータが指定されていない場合はデフォルト値を使用
+    if (hours <= 0) {
+        hours = DATA_HOURS;
+        if (config) {
+            hours = config->getSystemConfig().dataHours;
+        }
+    }
+    
+    String measurement = MEASUREMENT_NAME;
+    String field = FIELD_NAME_INSTANT_POWER_W;
+    int intervalMinutes = DATA_INTERVAL_MINUTES;
+    
+    if (config) {
+        const auto& dataConfig = config->getDataSourceConfig();
+        measurement = dataConfig.measurement;
+        field = dataConfig.field;
+        intervalMinutes = config->getSystemConfig().updateIntervalMinutes;
+    }
+    
+    String query = "from(bucket: \"";
+    query += INFLUXDB_BUCKET;
+    query += "\")";
+    query += " |> range(start: -";
+    query += String(hours);
+    query += "h)";
+    query += " |> filter(fn: (r) => r[\"_measurement\"] == \"";
+    query += measurement;
+    query += "\")";
+    query += " |> filter(fn: (r) => r[\"_field\"] == \"";
+    query += field;
+    query += "\")";
+    query += " |> aggregateWindow(every: ";
+    query += String(intervalMinutes);
+    query += "m, fn: mean, createEmpty: false)";
+    query += " |> yield(name: \"mean\")";
+    
     Serial.println("Executing Flux query: " + query);
     
     // Fluxクエリを実行
